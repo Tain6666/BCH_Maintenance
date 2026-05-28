@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCH Maintenance</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-primary mb-4 d-none" id="navbar">
+        <div class="container">
+            <span class="navbar-brand">BCH Maintenance</span>
+            <button class="btn btn-outline-light btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="loginSection" class="card mt-5 mx-auto" style="max-width: 400px;">
+            <div class="card-body">
+                <h3 class="card-title text-center mb-4">เข้าสู่ระบบ</h3>
+                <input type="text" id="username" class="form-control mb-3" placeholder="Username">
+                <input type="password" id="password" class="form-control mb-3" placeholder="Password">
+                <button class="btn btn-primary w-100" onclick="login()">Login</button>
+            </div>
+        </div>
+
+        <div id="menuSection" class="d-none text-center mt-5">
+            <button class="btn btn-success btn-lg m-2 w-100" style="max-width: 300px;" onclick="showCheckMenu()">
+                🔍 ตรวจสอบเครื่อง (Check)
+            </button>
+            <button class="btn btn-warning btn-lg m-2 w-100 d-none" id="btnManage" style="max-width: 300px;">
+                ⚙️ จัดการเครื่อง (Manage)
+            </button>
+        </div>
+
+        <div id="scanSection" class="d-none text-center">
+            <h4>ค้นหาเครื่อง</h4>
+            <div id="reader" style="width: 100%; max-width: 400px; margin: auto;"></div> <hr>
+            <p>หรือ กรอกรหัสเครื่อง</p>
+            <input type="text" id="machineId" class="form-control mb-2 mx-auto" style="max-width: 300px;">
+            <button class="btn btn-primary" onclick="searchMachine()">ค้นหา</button>
+            <button class="btn btn-secondary mt-3" onclick="backToMenu()">กลับ</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="app.js"></script>
+</body>
+</html>
