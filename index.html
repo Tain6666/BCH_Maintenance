@@ -129,8 +129,22 @@
                     </div>
                     <h5 class="fw-bold text-primary" id="modalMachineName">ชื่อเครื่อง...</h5>
                     <p class="mb-2 text-muted" id="modalMachineType">ประเภท: ...</p>
-                    <hr>
                     
+                    <div class="bg-primary bg-opacity-10 p-3 rounded mb-3">
+                        <div class="row align-items-center mb-2">
+                            <div class="col-5 text-secondary">วันที่เริ่มใช้งาน:</div>
+                            <div class="col-7 fw-bold" id="modalStartDate">-</div>
+                        </div>
+                        <div class="row align-items-center mb-2">
+                            <div class="col-5 text-secondary">อายุการใช้งาน:</div>
+                            <div class="col-7 fw-bold text-primary" id="modalAge">-</div>
+                        </div>
+                        <div class="row align-items-center">
+                            <div class="col-5 text-secondary">วันตรวจล่าสุด:</div>
+                            <div class="col-7 fw-bold" id="modalLastCheck">-</div>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-bold text-secondary">รายการตรวจสอบ</label>
                         <div id="dynamicCheckboxes" class="p-2 border rounded bg-light"></div>
@@ -145,7 +159,7 @@
                         <label class="form-label fw-bold">เลือกอะไหล่ที่เปลี่ยน</label>
                         <div id="partCheckboxes" class="mb-3 p-2 bg-white border rounded" style="max-height: 150px; overflow-y: auto;"></div>
                         
-                        <label class="form-label fw-bold text-primary">+ เพิ่มอะไหล่ใหม่ (และบันทึกเข้าสู่ระบบ)</label>
+                        <label class="form-label fw-bold text-primary">+ เพิ่มอะไหล่ใหม่</label>
                         <div class="input-group mb-2">
                             <input type="text" id="newPartName" class="form-control" placeholder="ชื่ออะไหล่">
                             <input type="number" id="newPartPrice" class="form-control" placeholder="ราคา" style="max-width: 100px;">
@@ -221,7 +235,14 @@
                         </div>
                         <div class="col-sm-6">
                             <label class="form-label fw-bold">รอบเวลาตรวจ</label>
-                            <input type="text" id="pCycle" class="form-control" placeholder="เช่น m6, y1">
+                            <div class="input-group">
+                                <input type="number" id="pCycleNum" class="form-control" placeholder="จำนวน" min="1">
+                                <select id="pCycleUnit" class="form-select">
+                                    <option value="d">วัน (Days)</option>
+                                    <option value="m">เดือน (Months)</option>
+                                    <option value="y">ปี (Years)</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="col-sm-6">
                             <label class="form-label fw-bold">สถานะ</label>
@@ -232,13 +253,17 @@
                                 <option value="จำหน่ายแล้ว">จำหน่ายแล้ว</option>
                             </select>
                         </div>
-                        <div class="col-12">
-                            <label class="form-label fw-bold">รายการตรวจสอบ (คั่นด้วยจุลภาค `,` )</label>
-                            <input type="text" id="pCheckList" class="form-control">
+                        
+                        <div class="col-12 border-top pt-3 mt-3">
+                            <label class="form-label fw-bold text-primary">รายการตรวจสอบ</label>
+                            <div id="editCheckListContainer" class="bg-light p-2 rounded"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addEditCheckItem()">+ เพิ่มรายการตรวจ</button>
                         </div>
-                        <div class="col-12">
-                            <label class="form-label fw-bold">รายการอะไหล่+ราคา</label>
-                            <input type="text" id="pPartsList" class="form-control" placeholder="{(อะไหล่1,300),(อะไหล่2,450)}">
+                        
+                        <div class="col-12 border-top pt-3 mt-3">
+                            <label class="form-label fw-bold text-primary">รายการอะไหล่และราคา</label>
+                            <div id="editPartsContainer" class="bg-light p-2 rounded"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addEditPartItem()">+ เพิ่มอะไหล่</button>
                         </div>
                     </div>
                 </div>
