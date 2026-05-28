@@ -1,7 +1,9 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyMhExH8HCNA-Vb6uPr3jYGCiv1lApnaEFOzSLxtv-tteTdJcOZ4aGg1woIy4Uvpa0/exec";
 let html5QrCode;
-let allProducts = []; 
-let currentMachineParts = []; 
+let allProducts = [];        // เก็บข้อมูลดิบทั้งหมดจากเบส
+let filteredProducts = [];   // เก็บข้อมูลที่ผ่านการกรองแล้วเพื่อนำไปทำคิวแบ่งหน้า
+let currentPage = 1;         // หน้าปัจจุบันที่กำลังดูอยู่
+const itemsPerPage = 50;     // จำกัดให้แสดงหน้าละ 50 รายการ
 
 window.onload = function() {
     const user = JSON.parse(localStorage.getItem('bch_user'));
@@ -40,60 +42,20 @@ function showCheckMenu() {
     document.getElementById('menuSection').classList.add('d-none');
     document.getElementById('scanSection').classList.remove('d-none');
 }
-function startScanner() {
-    if(html5QrCode) return; // ป้องกันการกดเปิดกล้องซ้ำ
-    
-    // เคลียร์ช่องกรอกรหัสเครื่องให้ว่างก่อนเริ่มสแกน
-    document.getElementById('machineId').value = '';
-
-    html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-        { facingMode: "environment" }, // บังคับใช้กล้องหลังมือถือ
-        { fps: 10, qrbox: { width: 250, height: 250 } }, // กำหนดขนาดกรอบโฟกัส
-        (decodedText) => {
-            // เมื่อกล้องสแกนเจอ QR Code ให้ทำงานตรงนี้
-            html5QrCode.stop().then(() => {
-                html5QrCode = null; // รีเซ็ตสถานะกล้อง
-                document.getElementById('machineId').value = decodedText;
-                
-                // แจ้งเตือนว่าสแกนติดแล้ว!
-                Swal.fire({
-                    icon: 'success',
-                    title: 'สแกนสำเร็จ',
-                    text: `รหัส: ${decodedText}`,
-                    timer: 1500,
-                    showConfirmButton: false
-                }).then(() => {
-                    searchMachine(); // สั่งให้เริ่มค้นหาเครื่องอัตโนมัติ
-                });
-
-            }).catch((err) => { console.log("Stop failed: ", err); });
-        },
-        (errorMessage) => {
-            // โค้ดส่วนนี้จะรันเงียบๆ ตลอดเวลาที่กล้องยังหา QR ไม่เจอ (ไม่ต้องใส่อะไร)
-        }
-    ).catch((err) => {
-        // กรณีเบราว์เซอร์บล็อกกล้อง
-        Swal.fire('ไม่สามารถเปิดกล้องได้', 'กรุณาอนุญาตสิทธิ์การใช้งานกล้อง หรือเปิดเว็บผ่าน Chrome / Safari', 'error');
-    });
-}
-
-// อัปเดตฟังก์ชันกลับหน้าหลักให้ปิดกล้องได้อย่างสมบูรณ์
 function backToMenu() {
-    if(html5QrCode) { 
-        html5QrCode.stop().then(() => { 
-            html5QrCode = null; 
-            showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
-        }).catch(()=>{ 
-            html5QrCode = null;
-            showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
-        }); 
-    } else {
-        showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
-    }
+    if(html5QrCode) { html5QrCode.stop().catch(()=>{}); html5QrCode = null; }
+    showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
 }
 
-// คำนวณอายุการใช้งาน
+function startScanner() {
+    if(html5QrCode) return;
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
+        (text) => { html5QrCode.stop(); document.getElementById('machineId').value = text; searchMachine(); }, 
+        (err) => {}
+    );
+}
+
 function calculateAge(dateStr) {
     if (!dateStr || dateStr === '-') return '-';
     let parts = dateStr.split('/');
@@ -142,7 +104,6 @@ function searchMachine() {
                 document.getElementById('modalCheckCount').value = (parseInt(p['ครั้งที่ตรวจ']) || 0) + 1;
                 document.getElementById('modalStatus').value = p['สถานะ'];
                 
-                // ข้อมูลวันที่ และอายุการใช้งาน
                 document.getElementById('modalStartDate').innerText = p['วันที่เริ่มใช้'] || '-';
                 document.getElementById('modalAge').innerText = calculateAge(p['วันที่เริ่มใช้']);
                 document.getElementById('modalLastCheck').innerText = p['วันที่ตรวจล่าสุด'] || '-';
@@ -248,7 +209,7 @@ function saveCheck() {
     });
 }
 
-// ---------------- Admin Section ----------------
+// ---------------- Admin Section (เพิ่มระบบแบ่งหน้า) ----------------
 function showManageMenu() {
     document.getElementById('menuSection').classList.add('d-none');
     document.getElementById('manageSection').classList.remove('d-none');
@@ -263,18 +224,36 @@ function loadAllProducts() {
             Swal.close();
             if (data.status === 'success') {
                 allProducts = data.data;
+                filteredProducts = [...allProducts]; // ค่าเริ่มต้นให้ตัวแปรคัดกรองมีค่าเท่ากับข้อมูลดิบหมด
+                currentPage = 1;                     // รีเซ็ตหน้ากลับไปหน้าแรกสุด
+                
                 const typeFilter = document.getElementById('filterType');
                 typeFilter.innerHTML = '<option value="">-- ทุกประเภท --</option>';
                 [...new Set(allProducts.map(p => p['ประเภท']).filter(t => t))].forEach(t => typeFilter.innerHTML += `<option value="${t}">${t}</option>`);
-                renderTable(allProducts);
+                
+                renderTable();
+                renderPagination();
             }
         });
 }
 
-function renderTable(products) {
+// ปรับปรุงการวาดตารางให้อ่านช่วงข้อมูลแบบแบ่งหน้า (.slice)
+function renderTable() {
     const tbody = document.getElementById('machineTableBody');
     tbody.innerHTML = '';
-    products.forEach(item => {
+    
+    // คำนวณช่วงดัชนีข้อมูลของหน้าปัจจุบัน (เช่น หน้า 1 คัทตั้งแต่ตัวที่ 0 ถึง 50)
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageItems = filteredProducts.slice(start, end);
+    
+    if (pageItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted py-4">ไม่พบข้อมูลเครื่องตามเงื่อนไขที่เลือก</td></tr>';
+        document.getElementById('paginationInfo').innerText = "แสดง 0 ถึง 0 จาก 0 รายการ";
+        return;
+    }
+
+    pageItems.forEach(item => {
         let badgeColor = item['สถานะ'] === 'ปกติ' ? 'bg-success' : 'bg-danger';
         tbody.innerHTML += `
             <tr class="clickable-row" onclick='openProductModal(${JSON.stringify(item)})'>
@@ -282,34 +261,80 @@ function renderTable(products) {
                 <td>${item['ชื่อเครื่อง']}</td>
                 <td>${item['ประเภท']}</td>
                 <td><span class="badge ${badgeColor}">${item['สถานะ']}</span></td>
-                <td>${item['วันที่ตรวจล่าสุด'] || '-'}</td>
+                <td>${item['...ครั้งที่ตรวจ'] || item['วันที่ตรวจล่าสุด'] || '-'}</td>
             </tr>`;
     });
+
+    // อัปเดตกล่องข้อความบอกตำแหน่งของช่วงรายการที่กำลังมองดูอยู่
+    const total = filteredProducts.length;
+    const displayStart = start + 1;
+    const displayEnd = end > total ? total : end;
+    document.getElementById('paginationInfo').innerText = `แสดง ${displayStart} ถึง ${displayEnd} จากทั้งหมด ${total} รายการ`;
 }
 
+// ฟังก์ชันสำหรับสร้างและคำนวณปุ่มเลขหน้าเปลี่ยนหน้าเว็บแบบ Dynamic
+function renderPagination() {
+    const controls = document.getElementById('paginationControls');
+    controls.innerHTML = '';
+    
+    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    if (totalPages <= 1) return; // ถ้าข้อมูลมีน้อยกว่า 50 รายการ (มีแค่ 1 หน้า) ไม่ต้องแสดงปุ่มเลขหน้าเลย
+
+    // ปุ่ม "ก่อนหน้า"
+    controls.innerHTML += `
+        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+            <button class="page-link" onclick="changePage(${currentPage - 1})">ก่อนหน้า</button>
+        </li>`;
+    
+    // จำกัดการแสดงเลขปุ่มในหน้าจอโทรศัพท์ให้เห็นแค่ช่วงแคบๆ รอบหน้าปัจจุบัน
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, currentPage + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        controls.innerHTML += `
+            <li class="page-item ${currentPage === i ? 'active' : ''}">
+                <button class="page-link" onclick="changePage(${i})">${i}</button>
+            </li>`;
+    }
+    
+    // ปุ่ม "ถัดไป"
+    controls.innerHTML += `
+        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+            <button class="page-link" onclick="changePage(${currentPage + 1})">ถัดไป</button>
+        </li>`;
+}
+
+function changePage(page) {
+    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    renderTable();
+    renderPagination();
+}
+
+// แก้ไข Bug เรื่องตัวกรองเดือนไม่แสดงผล
 function filterMachines() {
     const s = document.getElementById('filterSearch').value.toLowerCase();
     const t = document.getElementById('filterType').value;
     const st = document.getElementById('filterStatus').value;
-    const m = document.getElementById('filterMonth').value;
+    const m = document.getElementById('filterMonth').value; // คืนค่าตัวเลขเดือน เช่น "05" หรือเป็นค่าว่าง ""
 
-    const filtered = allProducts.filter(p => {
+    filteredProducts = allProducts.filter(p => {
         const mSearch = p['รหัส'].toLowerCase().includes(s) || p['ชื่อเครื่อง'].toLowerCase().includes(s);
         const mType = !t || p['ประเภท'] === t;
         const mStatus = !st || p['สถานะ'] === st;
-        let mMonth = true;
-        if(m && p['วันที่ตรวจล่าสุด']) {
-            const parts = p['วันที่ตรวจล่าสุด'].split('/');
-            if(parts.length >= 2) mMonth = (parts[1] === m);
-            else mMonth = false;
-        } else if (m) mMonth = false;
+        
+        // แก้ไขตรรกะใหม่: ถ้า m เป็นค่าว่าง (เลือก "ทุกเดือน") ให้ผ่านเงื่อนไขทันที (!m คืนค่าเป็น True)
+        const mMonth = !m || (p['วันที่ตรวจล่าสุด'] && p['วันที่ตรวจล่าสุด'].split('/')[1] === m);
         
         return mSearch && mType && mStatus && mMonth;
     });
-    renderTable(filtered);
+    
+    currentPage = 1; // ทุกครั้งที่มีการคัดกรองข้อมูลใหม่ ต้องดีดกลับไปเริ่มวาดตารางหน้า 1 เสมอ
+    renderTable();
+    renderPagination();
 }
 
-// ฟังก์ชันสร้าง UI เพิ่มรายการตรวจ
 function addEditCheckItem(val = '') {
     const div = document.createElement('div');
     div.className = 'input-group mb-2';
@@ -320,7 +345,6 @@ function addEditCheckItem(val = '') {
     document.getElementById('editCheckListContainer').appendChild(div);
 }
 
-// ฟังก์ชันสร้าง UI เพิ่มอะไหล่
 function addEditPartItem(name = '', price = '') {
     const div = document.createElement('div');
     div.className = 'input-group mb-2';
@@ -351,7 +375,6 @@ function openProductModal(prod) {
     document.getElementById('pName').value = prod ? prod['ชื่อเครื่อง'] : '';
     document.getElementById('pStatus').value = prod ? prod['สถานะ'] : 'ปกติ';
     
-    // แปลงรอบเวลาตรวจ (ดึงตัวอักษรและตัวเลขแยกกัน)
     let cycleStr = prod ? prod['รอบเวลาตรวจ'] : 'm6';
     let cMatch = cycleStr.match(/([a-zA-Z]+)(\d+)/);
     if(cMatch) {
@@ -362,14 +385,12 @@ function openProductModal(prod) {
         document.getElementById('pCycleNum').value = '6';
     }
 
-    // วาดรายการตรวจ
     document.getElementById('editCheckListContainer').innerHTML = '';
     let chkStr = prod ? (prod['รายการตรวจสอบ']||'').replace(/[\{\}]/g, '') : 'ทำความสะอาด,หยอดน้ำมัน,ล้าง filter';
     let chkArr = chkStr.split(',').map(x => x.trim()).filter(x => x);
     if(chkArr.length === 0) chkArr.push('');
     chkArr.forEach(item => addEditCheckItem(item));
 
-    // วาดรายการอะไหล่
     document.getElementById('editPartsContainer').innerHTML = '';
     let ptStr = prod ? (prod['รายการอะไหล่และราคา']||prod['รายการอะไหล่+ราคา']||'') : '{(อะไหล่1,300),(อะไหล่2,450)}';
     let ptMatches = ptStr.match(/\(([^)]+)\)/g);
@@ -385,7 +406,7 @@ function openProductModal(prod) {
     document.getElementById('pImageFile').value = '';
     document.getElementById('pOldImgUrl').value = prod ? prod['รูปภาพ(url)'] : '';
     const preview = document.getElementById('pImgPreview');
-    if(prod && prod['รูปภาพ(url)']) { preview.src = prod['รูปภาพ(url)']; preview.classList.remove('d-none'); }
+    if(prod && prod['รูปภาพ(url)']) { preview.src = prod['รูปภาพ(url)']; preview.src = prod['รูปภาพ(url)'].startsWith('http://googleusercontent.com') ? prod['รูปภาพ(url)'] : prod['รูปภาพ(url)']; preview.classList.remove('d-none'); }
     else { preview.classList.add('d-none'); }
 
     new bootstrap.Modal(document.getElementById('productModal')).show();
@@ -417,14 +438,12 @@ function saveProduct() {
     const d = document.getElementById('pStartDate').value;
     const formattedDate = d ? d.split('-').reverse().join('/') : ''; 
 
-    // รวบรวมข้อมูล CheckList
     let checks = [];
     document.querySelectorAll('.edit-chk-input').forEach(el => {
         if(el.value.trim()) checks.push(el.value.trim());
     });
     let buildCheckList = `{${checks.join(',')}}`;
 
-    // รวบรวมข้อมูล Parts
     let parts = [];
     const ptNames = document.querySelectorAll('.edit-pt-name');
     const ptPrices = document.querySelectorAll('.edit-pt-price');
@@ -435,7 +454,6 @@ function saveProduct() {
     }
     let buildPartsList = `{${parts.join(',')}}`;
 
-    // รวมรอบเวลาตรวจ
     let buildCycle = document.getElementById('pCycleUnit').value + document.getElementById('pCycleNum').value;
 
     const fileInput = document.getElementById('pImageFile');
