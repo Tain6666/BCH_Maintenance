@@ -312,25 +312,47 @@ function changePage(page) {
     renderPagination();
 }
 
-// แก้ไข Bug เรื่องตัวกรองเดือนไม่แสดงผล
 function filterMachines() {
     const s = document.getElementById('filterSearch').value.toLowerCase();
     const t = document.getElementById('filterType').value;
     const st = document.getElementById('filterStatus').value;
-    const m = document.getElementById('filterMonth').value; // คืนค่าตัวเลขเดือน เช่น "05" หรือเป็นค่าว่าง ""
+    const m = document.getElementById('filterMonth').value;
 
     filteredProducts = allProducts.filter(p => {
         const mSearch = p['รหัส'].toLowerCase().includes(s) || p['ชื่อเครื่อง'].toLowerCase().includes(s);
         const mType = !t || p['ประเภท'] === t;
         const mStatus = !st || p['สถานะ'] === st;
         
-        // แก้ไขตรรกะใหม่: ถ้า m เป็นค่าว่าง (เลือก "ทุกเดือน") ให้ผ่านเงื่อนไขทันที (!m คืนค่าเป็น True)
-        const mMonth = !m || (p['วันที่ตรวจล่าสุด'] && p['วันที่ตรวจล่าสุด'].split('/')[1] === m);
+        let mMonth = true;
+        // ถ้ามีการเลือกเดือนใน Dropdown (ตัวแปร m ไม่ใช่ค่าว่าง)
+        if (m) {
+            if (p['วันที่ตรวจล่าสุด'] && p['วันที่ตรวจล่าสุด'] !== '-') {
+                let dateStr = String(p['วันที่ตรวจล่าสุด']).trim();
+                let extractMonth = "";
+                
+                // ตรวจสอบว่าวันที่ใช้เครื่องหมายอะไรคั่น
+                if (dateStr.includes('/')) {
+                    // กรณีรูปแบบ DD/MM/YYYY (เช่น 28/5/2026 หรือ 28/05/2026)
+                    let parts = dateStr.split('/');
+                    if (parts.length >= 2) extractMonth = parts[1].padStart(2, '0'); 
+                } else if (dateStr.includes('-')) {
+                    // กรณีรูปแบบ YYYY-MM-DD (เช่น 2026-05-28)
+                    let parts = dateStr.split('-');
+                    if (parts.length >= 2) extractMonth = parts[1].padStart(2, '0');
+                }
+                
+                // นำเดือนที่สกัดได้ มาเทียบกับค่าใน Dropdown
+                mMonth = (extractMonth === m);
+            } else {
+                // ถ้าเลือกเดือน แต่เครื่องนี้ยังไม่มีประวัติการตรวจ ให้ซ่อนไว้
+                mMonth = false;
+            }
+        }
         
         return mSearch && mType && mStatus && mMonth;
     });
     
-    currentPage = 1; // ทุกครั้งที่มีการคัดกรองข้อมูลใหม่ ต้องดีดกลับไปเริ่มวาดตารางหน้า 1 เสมอ
+    currentPage = 1; // รีเซ็ตกลับไปหน้า 1 เสมอเมื่อมีการ Filter
     renderTable();
     renderPagination();
 }
