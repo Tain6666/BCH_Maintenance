@@ -40,18 +40,57 @@ function showCheckMenu() {
     document.getElementById('menuSection').classList.add('d-none');
     document.getElementById('scanSection').classList.remove('d-none');
 }
-function backToMenu() {
-    if(html5QrCode) { html5QrCode.stop().catch(()=>{}); html5QrCode = null; }
-    showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
+function startScanner() {
+    if(html5QrCode) return; // ป้องกันการกดเปิดกล้องซ้ำ
+    
+    // เคลียร์ช่องกรอกรหัสเครื่องให้ว่างก่อนเริ่มสแกน
+    document.getElementById('machineId').value = '';
+
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+        { facingMode: "environment" }, // บังคับใช้กล้องหลังมือถือ
+        { fps: 10, qrbox: { width: 250, height: 250 } }, // กำหนดขนาดกรอบโฟกัส
+        (decodedText) => {
+            // เมื่อกล้องสแกนเจอ QR Code ให้ทำงานตรงนี้
+            html5QrCode.stop().then(() => {
+                html5QrCode = null; // รีเซ็ตสถานะกล้อง
+                document.getElementById('machineId').value = decodedText;
+                
+                // แจ้งเตือนว่าสแกนติดแล้ว!
+                Swal.fire({
+                    icon: 'success',
+                    title: 'สแกนสำเร็จ',
+                    text: `รหัส: ${decodedText}`,
+                    timer: 1500,
+                    showConfirmButton: false
+                }).then(() => {
+                    searchMachine(); // สั่งให้เริ่มค้นหาเครื่องอัตโนมัติ
+                });
+
+            }).catch((err) => { console.log("Stop failed: ", err); });
+        },
+        (errorMessage) => {
+            // โค้ดส่วนนี้จะรันเงียบๆ ตลอดเวลาที่กล้องยังหา QR ไม่เจอ (ไม่ต้องใส่อะไร)
+        }
+    ).catch((err) => {
+        // กรณีเบราว์เซอร์บล็อกกล้อง
+        Swal.fire('ไม่สามารถเปิดกล้องได้', 'กรุณาอนุญาตสิทธิ์การใช้งานกล้อง หรือเปิดเว็บผ่าน Chrome / Safari', 'error');
+    });
 }
 
-function startScanner() {
-    if(html5QrCode) return;
-    html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
-        (text) => { html5QrCode.stop(); document.getElementById('machineId').value = text; searchMachine(); }, 
-        (err) => {}
-    );
+// อัปเดตฟังก์ชันกลับหน้าหลักให้ปิดกล้องได้อย่างสมบูรณ์
+function backToMenu() {
+    if(html5QrCode) { 
+        html5QrCode.stop().then(() => { 
+            html5QrCode = null; 
+            showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
+        }).catch(()=>{ 
+            html5QrCode = null;
+            showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
+        }); 
+    } else {
+        showMenu(JSON.parse(localStorage.getItem('bch_user')).role);
+    }
 }
 
 // คำนวณอายุการใช้งาน
