@@ -241,12 +241,11 @@ function loadAllProducts() {
         });
 }
 
-// ปรับปรุงการวาดตารางให้อ่านช่วงข้อมูลแบบแบ่งหน้า (.slice)
+// ปรับปรุงการวาดตารางให้ไฮไลท์วันที่สีแดงหากเกินกำหนด
 function renderTable() {
     const tbody = document.getElementById('machineTableBody');
     tbody.innerHTML = '';
     
-    // คำนวณช่วงดัชนีข้อมูลของหน้าปัจจุบัน (เช่น หน้า 1 คัทตั้งแต่ตัวที่ 0 ถึง 50)
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
     const pageItems = filteredProducts.slice(start, end);
@@ -259,17 +258,22 @@ function renderTable() {
 
     pageItems.forEach(item => {
         let badgeColor = item['สถานะ'] === 'ปกติ' ? 'bg-success' : 'bg-danger';
+        
+        // ตรวจสอบว่าเลยกำหนดหรือไม่ เพื่อทำไฮไลท์
+        let isOver = isOverdue(item['วันที่ตรวจล่าสุด'], item['รอบเวลาตรวจ']);
+        let dateColor = isOver ? 'text-danger fw-bold' : '';
+        let dateIcon = isOver ? '⚠️ ' : '';
+
         tbody.innerHTML += `
             <tr class="clickable-row" onclick='openProductModal(${JSON.stringify(item)})'>
                 <td class="fw-bold">${item['รหัส']}</td>
                 <td>${item['ชื่อเครื่อง']}</td>
                 <td>${item['ประเภท']}</td>
                 <td><span class="badge ${badgeColor}">${item['สถานะ']}</span></td>
-                <td>${item['...ครั้งที่ตรวจ'] || item['วันที่ตรวจล่าสุด'] || '-'}</td>
+                <td class="${dateColor}">${dateIcon}${item['วันที่ตรวจล่าสุด'] || '-'}</td>
             </tr>`;
     });
 
-    // อัปเดตกล่องข้อความบอกตำแหน่งของช่วงรายการที่กำลังมองดูอยู่
     const total = filteredProducts.length;
     const displayStart = start + 1;
     const displayEnd = end > total ? total : end;
@@ -316,11 +320,13 @@ function changePage(page) {
     renderPagination();
 }
 
+// อัปเดต Filter ให้กรองเฉพาะเครื่องที่เกินกำหนดได้
 function filterMachines() {
     const s = document.getElementById('filterSearch').value.toLowerCase();
     const t = document.getElementById('filterType').value;
     const st = document.getElementById('filterStatus').value;
     const m = document.getElementById('filterMonth').value;
+    const ov = document.getElementById('filterOverdue').value; // ดึงค่าเลยกำหนด
 
     filteredProducts = allProducts.filter(p => {
         const mSearch = p['รหัส'].toLowerCase().includes(s) || p['ชื่อเครื่อง'].toLowerCase().includes(s);
@@ -328,35 +334,35 @@ function filterMachines() {
         const mStatus = !st || p['สถานะ'] === st;
         
         let mMonth = true;
-        // ถ้ามีการเลือกเดือนใน Dropdown (ตัวแปร m ไม่ใช่ค่าว่าง)
         if (m) {
             if (p['วันที่ตรวจล่าสุด'] && p['วันที่ตรวจล่าสุด'] !== '-') {
                 let dateStr = String(p['วันที่ตรวจล่าสุด']).trim();
                 let extractMonth = "";
-                
-                // ตรวจสอบว่าวันที่ใช้เครื่องหมายอะไรคั่น
                 if (dateStr.includes('/')) {
-                    // กรณีรูปแบบ DD/MM/YYYY (เช่น 28/5/2026 หรือ 28/05/2026)
                     let parts = dateStr.split('/');
                     if (parts.length >= 2) extractMonth = parts[1].padStart(2, '0'); 
                 } else if (dateStr.includes('-')) {
-                    // กรณีรูปแบบ YYYY-MM-DD (เช่น 2026-05-28)
                     let parts = dateStr.split('-');
                     if (parts.length >= 2) extractMonth = parts[1].padStart(2, '0');
                 }
-                
-                // นำเดือนที่สกัดได้ มาเทียบกับค่าใน Dropdown
                 mMonth = (extractMonth === m);
             } else {
-                // ถ้าเลือกเดือน แต่เครื่องนี้ยังไม่มีประวัติการตรวจ ให้ซ่อนไว้
                 mMonth = false;
             }
         }
         
-        return mSearch && mType && mStatus && mMonth;
+        // เช็คเงื่อนไขรอบการตรวจ
+        let mOverdue = true;
+        if (ov === 'overdue') {
+            mOverdue = isOverdue(p['วันที่ตรวจล่าสุด'], p['รอบเวลาตรวจ']);
+        } else if (ov === 'normal') {
+            mOverdue = !isOverdue(p['วันที่ตรวจล่าสุด'], p['รอบเวลาตรวจ']);
+        }
+        
+        return mSearch && mType && mStatus && mMonth && mOverdue;
     });
     
-    currentPage = 1; // รีเซ็ตกลับไปหน้า 1 เสมอเมื่อมีการ Filter
+    currentPage = 1;
     renderTable();
     renderPagination();
 }
