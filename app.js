@@ -33,9 +33,13 @@ function showMenu(role) {
     document.getElementById('loginSection').classList.add('d-none');
     document.getElementById('scanSection').classList.add('d-none');
     document.getElementById('manageSection').classList.add('d-none');
+    document.getElementById('dashboardSection').classList.add('d-none'); // เพิ่มบรรทัดนี้
     document.getElementById('navbar').classList.remove('d-none');
     document.getElementById('menuSection').classList.remove('d-none');
-    if (role === 'admin') document.getElementById('btnManage').classList.remove('d-none');
+    if (role === 'admin') { 
+        document.getElementById('btnManage').classList.remove('d-none'); 
+        document.getElementById('btnDashboard').classList.remove('d-none'); // เพิ่มบรรทัดนี้
+    }
 }
 
 function showCheckMenu() {
@@ -509,4 +513,198 @@ function saveProduct() {
 
     if (fileInput.files.length > 0) getBase64Image(fileInput.files[0], finalizeSave);
     else finalizeSave(null);
+}
+
+// ==========================================
+// ส่วนของ Dashboard สถิติ (เพิ่มใหม่)
+// ==========================================
+let dashProducts = [];
+let dashChecks = [];
+let chart1, chart2, chart3; // ตัวแปรเก็บกราฟเพื่อทำลายก่อนวาดใหม่
+
+function showDashboardMenu() {
+    document.getElementById('menuSection').classList.add('d-none');
+    document.getElementById('dashboardSection').classList.remove('d-none');
+    loadDashboardData();
+}
+
+function loadDashboardData() {
+    Swal.fire({ title: 'กำลังโหลดข้อมูลสถิติ...', didOpen: () => Swal.showLoading() });
+    fetch(`${API_URL}?action=getDashboardData`)
+        .then(res => res.json())
+        .then(data => {
+            Swal.close();
+            if (data.status === 'success') {
+                dashProducts = data.products;
+                dashChecks = data.checks;
+
+                // 1. สร้าง Dropdown ประเภท
+                const typeFilter = document.getElementById('dashType');
+                typeFilter.innerHTML = '<option value="">-- รวมทุกประเภท --</option>';
+                [...new Set(dashProducts.map(p => p['ประเภท']).filter(t => t))].forEach(t => typeFilter.innerHTML += `<option value="${t}">${t}</option>`);
+
+                // 2. สร้าง Dropdown ปีงบประมาณ (ดึงจากประวัติการตรวจ)
+                const yearFilter = document.getElementById('dashYear');
+                let years = new Set();
+                dashChecks.forEach(c => {
+                    if (c['วันที่ตรวจสอบ']) {
+                        let fy = getFiscalYear(c['วันที่ตรวจสอบ']);
+                        if (fy) years.add(fy);
+                    }
+                });
+                let currentFY = getFiscalYear(new Date().toLocaleDateString('en-GB'));
+                years.add(currentFY);
+                let sortedYears = Array.from(years).sort((a,b) => b-a);
+                yearFilter.innerHTML = '';
+                sortedYears.forEach(y => yearFilter.innerHTML += `<option value="${y}" ${y === currentFY ? 'selected' : ''}>ปีงบประมาณ ${y}</option>`);
+
+                updateDashboard();
+            }
+        });
+}
+
+// ฟังก์ชันแปลงวันที่ DD/MM/YYYY เป็นปีงบประมาณ (พ.ค. - เม.ย.)
+function getFiscalYear(dateStr) {
+    if(!dateStr || dateStr === '-') return null;
+    let parts = dateStr.split('/');
+    if(parts.length !== 3) return null;
+    let m = parseInt(parts[1]);
+    let y = parseInt(parts[2]);
+    // ถ้าเดือน 5 ถึง 12 ถือเป็นปีนั้น, ถ้าเดือน 1 ถึง 4 ถือเป็นปีก่อนหน้า
+    return m >= 5 ? y : y - 1;
+}
+
+// คำนวณการเกินรอบตรวจ
+function isOverdue(lastCheckStr, cycleStr) {
+    if(!lastCheckStr || lastCheckStr === '-') return true; // ถือว่าเกิน/ต้องตรวจ
+    let parts = lastCheckStr.split('/');
+    if(parts.length!==3) return false;
+    let lastDate = new Date(parts[2], parseInt(parts[1])-1, parts[0]);
+    if(isNaN(lastDate)) return false;
+
+    let cycleMatch = cycleStr.match(/([a-zA-Z]+)(\d+)/);
+    if(!cycleMatch) return false;
+    let unit = cycleMatch[1], val = parseInt(cycleMatch[2]);
+
+    let nextDate = new Date(lastDate);
+    if(unit === 'd') nextDate.setDate(nextDate.getDate() + val);
+    else if(unit === 'm') nextDate.setMonth(nextDate.getMonth() + val);
+    else if(unit === 'y') nextDate.setFullYear(nextDate.getFullYear() + val);
+
+    // ปัดเศษให้เช็คแค่ถึงวัน
+    let today = new Date(); today.setHours(0,0,0,0); nextDate.setHours(0,0,0,0);
+    return nextDate < today;
+}
+
+function updateDashboard() {
+    const selYear = parseInt(document.getElementById('dashYear').value);
+    const selMonth = document.getElementById('dashMonth').value; // '05', '12', '', etc.
+    const selType = document.getElementById('dashType').value;
+
+    // --- กรองข้อมูล Products ---
+    let fProducts = dashProducts.filter(p => !selType || p['ประเภท'] === selType);
+
+    // คำนวณสรุป Card เครื่อง
+    let overdueCount = 0;
+    let statusCounts = { 'ปกติ':0, 'ผิดปกติ':0, 'รอเปลี่ยนอะไหล่':0, 'จำหน่ายแล้ว':0, 'ยกเลิก':0 };
+    let typeCounts = {};
+
+    fProducts.forEach(p => {
+        if(isOverdue(p['วันที่ตรวจล่าสุด'], p['รอบเวลาตรวจ']) && p['สถานะ'] !== 'จำหน่ายแล้ว' && p['สถานะ'] !== 'ยกเลิก') overdueCount++;
+        let st = p['สถานะ'] || 'ปกติ';
+        if(statusCounts[st] !== undefined) statusCounts[st]++; else statusCounts[st] = 1;
+        let t = p['ประเภท'] || 'ไม่ระบุ';
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+    });
+
+    document.getElementById('dashTotalMachine').innerText = fProducts.length.toLocaleString();
+    document.getElementById('dashOverdue').innerText = overdueCount.toLocaleString();
+
+    // --- กรองข้อมูล Checks ---
+    let fChecks = dashChecks.filter(c => {
+        if(!c['วันที่ตรวจสอบ']) return false;
+        let fy = getFiscalYear(c['วันที่ตรวจสอบ']);
+        let month = c['วันที่ตรวจสอบ'].split('/')[1];
+        let typeMatch = !selType || c['ประเภท'] === selType;
+        let yearMatch = (fy === selYear);
+        let monthMatch = !selMonth || (month === selMonth);
+        return typeMatch && yearMatch && monthMatch;
+    });
+
+    // คำนวณสรุป Card สถิติการตรวจ/ราคา
+    let totalCost = 0;
+    let costByType = {};
+    let checkItemsStats = {};
+
+    fChecks.forEach(c => {
+        let cost = parseFloat(c['ราคา']) || 0;
+        totalCost += cost;
+        let t = c['ประเภท'] || 'ไม่ระบุ';
+        costByType[t] = (costByType[t] || 0) + cost;
+
+        // แกะรายละเอียดสิ่งที่ตรวจ (คั่นด้วยคอมมา)
+        let details = c['รายละเอียดตรวจสอบ'] ? c['รายละเอียดตรวจสอบ'].split(',') : [];
+        details.forEach(item => {
+            let cleanItem = item.trim();
+            if(cleanItem) checkItemsStats[cleanItem] = (checkItemsStats[cleanItem] || 0) + 1;
+        });
+    });
+
+    document.getElementById('dashTotalChecks').innerText = fChecks.length.toLocaleString();
+    document.getElementById('dashTotalCost').innerText = totalCost.toLocaleString();
+
+    // วาดสถิติรายการที่ตรวจ
+    const listHtml = document.getElementById('checkStatsList');
+    listHtml.innerHTML = '';
+    let sortedCheckStats = Object.entries(checkItemsStats).sort((a,b) => b[1] - a[1]);
+    if(sortedCheckStats.length === 0) listHtml.innerHTML = '<li class="list-group-item text-muted text-center">ไม่มีข้อมูล</li>';
+    sortedCheckStats.forEach(item => {
+        listHtml.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">${item[0]} <span class="badge bg-primary rounded-pill">${item[1]} ครั้ง</span></li>`;
+    });
+
+    // --- วาดกราฟ Chart.js ---
+    if(chart1) chart1.destroy();
+    if(chart2) chart2.destroy();
+    if(chart3) chart3.destroy();
+
+    // กราฟสัดส่วนสถานะ (Pie)
+    chart1 = new Chart(document.getElementById('chartStatus'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(statusCounts),
+            datasets: [{
+                data: Object.values(statusCounts),
+                backgroundColor: ['#198754', '#dc3545', '#ffc107', '#6c757d', '#212529']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    // กราฟจำนวนเครื่องแยกประเภท (Bar)
+    chart2 = new Chart(document.getElementById('chartCategory'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(typeCounts),
+            datasets: [{
+                label: 'จำนวนเครื่อง',
+                data: Object.values(typeCounts),
+                backgroundColor: '#0d6efd'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    // กราฟค่าใช้จ่ายแยกประเภท (Bar)
+    chart3 = new Chart(document.getElementById('chartCost'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(costByType),
+            datasets: [{
+                label: 'ค่าอะไหล่ (บาท)',
+                data: Object.values(costByType),
+                backgroundColor: '#198754'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
 }
