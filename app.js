@@ -574,25 +574,48 @@ function getFiscalYear(dateStr) {
     return m >= 5 ? y : y - 1;
 }
 
-// คำนวณการเกินรอบตรวจ
+// คำนวณการเกินรอบตรวจ (อัปเดตใหม่ให้แม่นยำและป้องกัน Error)
 function isOverdue(lastCheckStr, cycleStr) {
-    if(!lastCheckStr || lastCheckStr === '-') return true; // ถือว่าเกิน/ต้องตรวจ
-    let parts = lastCheckStr.split('/');
-    if(parts.length!==3) return false;
-    let lastDate = new Date(parts[2], parseInt(parts[1])-1, parts[0]);
-    if(isNaN(lastDate)) return false;
+    // 1. ถ้าไม่เคยตรวจเลย หรือเป็นค่าว่าง ให้ถือว่าถึงรอบต้องตรวจแล้ว (Overdue = true)
+    if (!lastCheckStr || String(lastCheckStr).trim() === '' || lastCheckStr === '-') return true;
 
-    let cycleMatch = cycleStr.match(/([a-zA-Z]+)(\d+)/);
-    if(!cycleMatch) return false;
-    let unit = cycleMatch[1], val = parseInt(cycleMatch[2]);
+    // 2. ดึงเฉพาะส่วนของวันที่ (ตัดเวลาทิ้งกรณีมีเวลาพ่วงมาด้วย เช่น "29/05/2026 10:00")
+    let dateStr = String(lastCheckStr).trim().split(' ')[0]; 
+    let parts = [];
+    
+    // 3. รองรับการคั่นทั้งรูปแบบ / และ -
+    if (dateStr.includes('/')) {
+        parts = dateStr.split('/');
+    } else if (dateStr.includes('-')) {
+        parts = dateStr.split('-').reverse(); // สลับ YYYY-MM-DD ให้เป็น DD-MM-YYYY
+    }
+    
+    if (parts.length !== 3) return false;
 
+    // สร้างออบเจ็กต์วันที่ของวันตรวจล่าสุด
+    let lastDate = new Date(parts[2], parseInt(parts[1]) - 1, parts[0]);
+    if (isNaN(lastDate.getTime())) return false; // ถ้าแปลงวันที่ไม่ได้ ให้ข้ามไป
+
+    // 4. ตรวจสอบเงื่อนไขรอบเวลาตรวจ (เช่น m6, d15, y1)
+    if (!cycleStr) return false;
+    let cycleMatch = String(cycleStr).match(/([a-zA-Z]+)(\d+)/);
+    if (!cycleMatch) return false;
+
+    let unit = cycleMatch[1].toLowerCase();
+    let val = parseInt(cycleMatch[2]);
+
+    // บวกเวลาเพิ่มเข้าไปในวันตรวจล่าสุด เพื่อหาวันครบกำหนด (Next Due Date)
     let nextDate = new Date(lastDate);
-    if(unit === 'd') nextDate.setDate(nextDate.getDate() + val);
-    else if(unit === 'm') nextDate.setMonth(nextDate.getMonth() + val);
-    else if(unit === 'y') nextDate.setFullYear(nextDate.getFullYear() + val);
+    if (unit === 'd') nextDate.setDate(nextDate.getDate() + val);
+    else if (unit === 'm') nextDate.setMonth(nextDate.getMonth() + val);
+    else if (unit === 'y') nextDate.setFullYear(nextDate.getFullYear() + val);
 
-    // ปัดเศษให้เช็คแค่ถึงวัน
-    let today = new Date(); today.setHours(0,0,0,0); nextDate.setHours(0,0,0,0);
+    // 5. เทียบกับวันปัจจุบัน (รีเซ็ตเวลาให้เป็นเที่ยงคืนตรง เพื่อวัดแค่ตัว "วัน")
+    let today = new Date(); 
+    today.setHours(0, 0, 0, 0); 
+    nextDate.setHours(0, 0, 0, 0);
+    
+    // ถ้าวันครบกำหนด น้อยกว่า วันนี้ = ถือว่าเลยรอบตรวจแล้ว
     return nextDate < today;
 }
 
