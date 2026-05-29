@@ -66,14 +66,14 @@
                     </div>
                 </div>
                 
-                <div class="row g-2 bg-light p-3 rounded-3 mb-3">
-                    <div class="col-6 col-md-3">
+                <div class="row g-2 bg-light p-3 rounded-3 mb-3 shadow-sm">
+                    <div class="col-6 col-md-2">
                         <input type="text" id="filterSearch" class="form-control" placeholder="ค้นหา รหัส/ชื่อ" oninput="filterMachines()">
                     </div>
-                    <div class="col-6 col-md-3">
+                    <div class="col-6 col-md-2">
                         <select id="filterType" class="form-select" onchange="filterMachines()"></select>
                     </div>
-                    <div class="col-6 col-md-3">
+                    <div class="col-6 col-md-2">
                         <select id="filterStatus" class="form-select" onchange="filterMachines()">
                             <option value="">-- ทุกสถานะ --</option>
                             <option value="ปกติ">ปกติ</option>
@@ -96,6 +96,13 @@
                             <option value="10">ตุลาคม</option>
                             <option value="11">พฤศจิกายน</option>
                             <option value="12">ธันวาคม</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <select id="filterOverdue" class="form-select border-danger text-danger fw-bold" onchange="filterMachines()">
+                            <option value="" class="text-dark">-- สถานะรอบตรวจทั้งหมด --</option>
+                            <option value="overdue">🔴 เลยกำหนดตรวจแล้ว</option>
+                            <option value="normal">🟢 ยังไม่ถึงกำหนด</option>
                         </select>
                     </div>
                 </div>
